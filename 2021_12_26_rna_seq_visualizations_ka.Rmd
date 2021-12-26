@@ -1,0 +1,370 @@
+---
+title: "RNA seq visualizations"
+author: "Kesava Asam"
+date: "Report Last Run: `r Sys.time()`"
+output: 
+  pdf_document:
+    toc_depth: 2
+    number_sections: true
+    includes:
+      in_header: ~/Documents/Aouizerat_Lab/pdf_req/header.tex
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# copy the logo to the current directory
+file.copy("~/Documents/Aouizerat_Lab/pdf_req/alab_logo.png", getwd())
+```
+
+# Introduction
+
+RNA seq visualization codes that are used in the Aouizerat lab. The steps are layed out assuming that they are performed on a new project or a new computer. 
+
+# Install packages
+
+```{r}
+### CRAN
+package_list <- 
+c("BiocManager", "tidyverse", "data.table", 
+"WriteXLS", "corrplot", "RColorBrewer", "pheatmap", 
+"ggrepel", "patchwork", "kableExtra", "ggpubr")
+
+for(package in package_list) {           
+  if (!requireNamespace(package, quietly = TRUE))
+    install.packages(package)                  
+}
+
+### Bioconductor
+package_list <- 
+c("DESeq2", "apeglm", "EnrichmentBrowser", 
+"sva", "RUVSeq", "clusterProfiler", "ReactomePA", 
+"org.Hs.eg.db", "OrganismDbi", "Homo.sapiens", "qvalue", 
+"airway")
+
+for(package in package_list) {           
+  if (!requireNamespace(package, quietly = TRUE))
+    BiocManager::install(package)                  
+}
+```
+
+# Load Packages
+
+```{r results='hide', message=F, warning=F}
+library(tidyverse) # Manipulations of datatables
+library(airway) # RNA seq data
+library(DESeq2) # for DEG generation
+library(sva) # for batch corrections
+library(RUVSeq) # for RUV batch correction
+library(EnrichmentBrowser) # has the new annotation method
+library(qvalue) # to determine q or false discovery rate values
+library(Homo.sapiens) # for annotating EntrezID to Genesymbols
+library(corrplot) # To genearte correlation plots
+library(RColorBrewer) # Colors in graphs
+library(pheatmap) # for the distance plots
+library(ggrepel) # for labeling on graphs without overlap
+library(patchwork) # collages of ggplots
+
+library(kableExtra) # for displaying data tables in a pdf
+library(ggpubr) # for ggplot collage
+```
+
+# Data
+
+```{r}
+data("airway")
+
+rna_data <- airway
+```
+
+```{r}
+ddsSE <- DESeqDataSet(rna_data, design = ~ cell + dex)
+ddsSE
+```
+
+```{r}
+keep <- rowSums(counts(ddsSE)) >= 10
+dds <- ddsSE[keep,]
+```
+
+```{r}
+dds$dex <- relevel(dds$dex, ref = "untrt")
+```
+
+```{r}
+dds_deseq <- DESeq(dds)
+res <- results(dds_deseq)
+res
+```
+
+```{r}
+resultsNames(dds_deseq)
+```
+
+```{r}
+resLFC <- lfcShrink(dds_deseq, 
+                    coef="dex_trt_vs_untrt", 
+                    type="apeglm")
+
+resLFC
+```
+
+```{r warning=FALSE}
+deg_ruv_dat <- as.data.frame(resLFC) %>% 
+  rownames_to_column("ENSEMBL")
+
+# use OrganismDb to retrieve gene annotations from homo.sapiens
+anno <- AnnotationDbi::select(Homo.sapiens, keytype='ENSEMBL', 
+                              keys=deg_ruv_dat$ENSEMBL,
+                    columns=c('SYMBOL', 'GENENAME'), multiVals="first")
+
+# Merge the annotation with the results
+anno_deg_ruv <- merge(deg_ruv_dat, anno)
+
+### Rearrange the columns for easy viewing
+res_deg_ruv <-
+anno_deg_ruv %>% 
+  arrange(pvalue) %>% 
+  dplyr::select(ENSEMBL, SYMBOL, log2FoldChange, pvalue, padj, everything())
+
+res_deg_ruv %>% as_tibble()
+```
+
+# PCA plot
+
+Normalize the data using the variance stabilizing method.
+
+```{r}
+vsd <- vst(dds, blind=FALSE)
+```
+
+A way to visualize sample-to-sample distances is through principal-components analysis (PCA). In this ordination method, the data points (i.e., here, the samples) are projected onto the 2D plane such that they spread out in the two directions which explain most of the differences in the data. The x-axis is the direction (or principal component) which separates the data points the most. The amount of the total variance which is contained in the direction is printed in the axis label.
+
+```{r}
+# 1000 genes showing the highest variance are used for PCA
+ntop = 1000
+
+# Get the variability of each row
+Pvars <- rowVars(assay(vsd))
+
+# Order the Variability and get top genes
+select <- order(Pvars, 
+                decreasing = TRUE)[
+                  seq_len(min(ntop, length(Pvars)))]
+
+# Calculate PCA for the top genes
+PCA <- prcomp(t(assay(vsd)[select, ]), scale = F)
+
+# Get the percentage of Variability per PC
+percentVar <- round(100*PCA$sdev^2/sum(PCA$sdev^2),1)
+
+# Copy the PCA Data into a Dataframe 
+dataGG_nb = data.frame(PC1 = PCA$x[,1], PC2 = PCA$x[,2], 
+                    PC3 = PCA$x[,3], PC4 = PCA$x[,4],
+                    PC5 = PCA$x[,5], PC6 = PCA$x[,6],
+                    sampleNO = colnames(vsd),
+                    condition = colData(vsd)$dex)
+```
+
+```{r}
+# Title of the graph
+title <- "Dexamethasone untreated vs treated"
+
+# Caption; data source
+caption <- "Data Source: \n Airway Data"
+
+# PCA plot
+ggplot(dataGG_nb, aes(x=PC1, y=PC2, 
+                     color = condition)) +
+  geom_point(size = 2.2, alpha = 0.8) +
+  geom_text_repel(data=dataGG_nb, 
+             aes(label=sampleNO), size = 3.5) + # Name labels
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  theme_bw() + 
+  scale_fill_brewer(type="qual")+
+  scale_colour_brewer(type="qual", palette=7) +
+  scale_x_continuous(breaks=seq(-70,70,10), limits = c(-25,25)) +
+  scale_y_continuous(breaks=seq(-70,70,10), limits = c(-25,25)) +
+  labs(title = title, caption = caption, 
+       subtitle = "PCs calculated from top 1000 variable genes.")
+```
+
+# QQ plot
+
+[QQ plots code](https://slowkow.com/notes/ggplot2-qqplot/)
+
+```{r Func: Q-Q plots}
+# Function for creating the qqplots
+# Using the Unadjusted P values from results
+
+qq_plot <- function(pvals, ci = 0.95) {
+  
+  n <- length(pvals)
+  df <- data.frame(
+  observed = -log10(sort(pvals)),
+  expected = -log10(ppoints(n)),
+  clower = -log10(qbeta(p = (1 - ci) / 2, shape1 = 1:n, shape2 = n:1)),
+  cupper = -log10(qbeta(p = (1 + ci) / 2, shape1 = 1:n, shape2 = n:1))
+  )
+  log10Pe <- expression(paste("Expected -log"[10], plain(P)))
+  log10Po <- expression(paste("Observed -log"[10], plain(P)))
+  ggplot(df) +
+  geom_ribbon(
+  mapping = aes(x = expected, ymin = clower, ymax = cupper),
+  alpha = 0.1
+  ) +
+  geom_point(aes(expected, observed), shape = 1, size = 3) +
+  geom_abline(intercept = 0, slope = 1, alpha = 0.5) +
+  xlab(log10Pe) +
+  ylab(log10Po) +
+  theme_bw(base_size = 15) +
+  labs(caption = caption, 
+       subtitle = "Observed unadjusted P values are plotted against the expected.") +
+  annotate(
+  geom = "text",
+  x = -Inf,
+  y = Inf,
+  hjust = -0.15,
+  vjust = 1 + 0.15 * 3,
+  label = sprintf("Inflation Factor = %.2f", inflation(pvals)),
+  size = 6.2) +
+  theme(
+  axis.ticks = element_line(size = 0.5),
+  panel.grid = element_blank()
+  )
+}
+```
+
+```{r Func: Calculating lambda}
+inflation <- function(pvals) {
+chisq <- qchisq(1 - pvals, 1)
+lambda <- median(chisq) / qchisq(0.5, 1)
+lambda
+}
+```
+
+
+```{r}
+qq_plot(res_deg_ruv$pvalue)
+```
+
+
+```{r Func: Volcano plot}
+#Colour Palette
+pal <- c(
+  "Down-regulated" = "red",
+  "Not significant" = "gray", 
+  "Up-regulated" = "blue",
+  "~ Down-regulated" = "#E45093",
+  "~ Up-regulated" = "#01A5E1"
+)
+
+# Function for creating the volcano plots from DEG data frames
+
+vol_plot <- function(df) {
+  
+  df %>% mutate(key = factor(case_when(padj < 0.05 & log2FoldChange > 1 ~ "Up-regulated", 
+                                       padj < 0.05 & log2FoldChange > 0.5 ~ "~ Up-regulated", 
+                                       padj < 0.05 & log2FoldChange < -1 ~ "Down-regulated",
+                                       padj < 0.05 & log2FoldChange < -0.5 ~ "~ Down-regulated",
+                                       TRUE ~ "Not significant"))) %>% 
+    ggplot(., aes(x = log2FoldChange, y = -log10(padj), 
+                  name = SYMBOL)) +
+    geom_point(aes(color = key), size =1.5, alpha = 0.8)+
+    scale_color_manual(values = pal)+
+    geom_vline(xintercept = 1, color="#b8b8b8", linetype=3)+
+    geom_vline(xintercept = -1, color="#b8b8b8", linetype=3)+
+    geom_hline(yintercept = -log10(0.1), color="#b8b8b8", linetype=3)+
+    scale_x_continuous(breaks=seq(-15,15,1)) +
+    scale_y_continuous(breaks=seq(0,200,20)) +
+    theme_bw() + 
+    labs(subtitle = "-log10 adj P values are represented on the Y axis, and Log 2 Fold change on the X axis.", 
+         caption = caption)
+  
+}
+```
+
+```{r}
+vol_plot(res_deg_ruv)
+```
+
+
+# Calculate Hidden Batch Effects (SVA)
+
+Calculate Hidden Batch Effects and remove any batches that data may have that we are not aware of
+
+```{r}
+dat  <- counts(dds_res, normalized = TRUE)
+```
+
+```{r}
+idx  <- rowMeans(dat) > 10
+dat  <- dat[idx, ]
+
+# Model matrix with all Co-variates and Variable of Interest
+mod  <- model.matrix(~dex , data=colData(dds_res))
+
+# Null model matrix with all adjustment variables (Co-variates) 
+# Note: This doesnt have the variable of Interest
+mod0 <- model.matrix(~1, 
+                     data=colData(dds_res))
+
+# Generate the Surrogate Variables
+svseq <- svaseq(dat, mod, mod0)
+```
+
+
+### Correlation check
+
+Check to see if the Biological variables and surrogate variables are correlated
+
+Prep Data
+
+```{r}
+# Add the surrogate variables as a dataframe
+sv_df <- as.data.frame(svseq$sv)
+
+# Rename all the columns
+names(sv_df) <- gsub("V", "SV", names(sv_df))
+
+# Get all the Phenotypes of interest
+pheno <- 
+  colData(dds_res)$dex %>% 
+  as.data.frame() %>% setNames("dex") %>% 
+  mutate(dex = as.numeric(dex))
+  
+
+# Merge the sv_df with he phenotype
+pheno_sv <- cbind(pheno, sv_df)
+```
+
+Number of significant surrogate variables is:  `r ncol(sv_df)`
+
+Perform correlation to check how the data points are correlated with each other  
+
+```{r}
+# Generating the correlation matrix
+corr <- cor(pheno_sv)
+```
+
+### Visualize
+
+```{r}
+col1 <- colorRampPalette(c("#2B226D", "#372C8C", "#4235A9", 
+                           "#6259AF", "#B5B1D3",
+                           "#D7B49E", "#DC602E", 
+                           "#D4592E", "#CC512D", "#BC412B"))
+
+# Generate correlation plot
+corrplot(corr, method = "number", 
+         type = "full", 
+         title = "Correlation between the Phenotypes", mar = c(0, 0, 1, 1),
+         col = col1(10),
+         number.cex = 0.7,
+         number.digits = 2,
+         tl.col = "black")
+```
+
