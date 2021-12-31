@@ -19,6 +19,7 @@ editor_options:
 file.copy("~/Documents/Aouizerat_Lab/pdf_req/alab_logo.png", getwd())
 
 #### Note: header.tex location should be changed as per the computer and the logo should be copied in working directory
+#### Look in kra277/aouizerat_lab_2021/rmarkdown_req/pdf_req for the files needed
 
 ## To keep the Table of contents 
 
@@ -79,7 +80,7 @@ editor_options:
 --
 
 #### Note: .png and .css files location should be changed as per the computer
-
+#### Look in kra277/aouizerat_lab_2021/rmarkdown_req/db_req for the files needed
 
 ## Font size in HTML rmarkdowns
 
