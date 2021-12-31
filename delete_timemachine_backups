@@ -1,0 +1,24 @@
+## This is to free up space from the mac when there is automatic time machine backup is on
+
+## Time machine backups can be looked for by the following command
+
+# ron@kesava [13:38:53] ~ $
+tmutil listlocalsnapshots /
+
+# com.apple.TimeMachine.2020-09-08-112753
+# com.apple.TimeMachine.2020-09-08-132232
+
+## A specific time machine backup can be removed by using the following command
+
+# ron@kesava [13:38:58] ~ $
+sudo tmutil deletelocalsnapshots 2020-09-08-112753
+
+# Password:
+# Deleted local snapshot '2020-09-08-112753'
+
+## You may use this command without super user (depends on the mac)
+
+# ron@kesava [13:39:42] ~ $
+sudo tmutil deletelocalsnapshots 2020-09-08-132232
+
+# Deleted local snapshot '2020-09-08-132232'
