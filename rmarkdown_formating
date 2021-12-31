@@ -1,0 +1,92 @@
+# Aouizerat lab Rmarkdown PDF usage guides
+
+## Aouzierat lab uses the following markdown options for PDF
+---
+title: "Title for the PDF"
+author: "Kesava Asam"
+date: "Report Last Run: `r Sys.time()`"
+output: 
+  pdf_document:
+    toc_depth: 2
+    number_sections: true
+    includes:
+      in_header: ~/Documents/Aouizerat_Lab/pdf_req/header.tex
+editor_options: 
+  chunk_output_type: console
+--
+
+## copy the logo to the current directory
+file.copy("~/Documents/Aouizerat_Lab/pdf_req/alab_logo.png", getwd())
+
+#### Note: header.tex location should be changed as per the computer and the logo should be copied in working directory
+
+## To keep the Table of contents 
+
+\newpage
+
+\centering
+\raggedright
+\newpage
+\tableofcontents
+
+\newpage
+
+
+## You can change the overall size of the font in the PDF by 
+
+\fontsize{12}{22}
+
+
+## Giving space inbetween lines
+
+\vspace{24pt}
+
+
+################################################################################################################################################
+
+# Kable extra
+
+## Table results as lanscape
+
+kbl(., caption = "Caption for the Table", 
+      booktabs = T, longtable = T) %>% ## The long table option displays the table in landscape orientation
+      
+  kable_styling(latex_options = 
+                  c("striped", "hold_position", "repeat_header"), 
+                  
+                font_size = 8) %>% ## font size
+                
+  column_spec(6, width = "20em") ## Width of a specifim column, here its column 6
+  
+ 
+################################################################################################################################################
+ 
+## Aouzierat lab uses the following markdown options for Flex Dashboard
+
+---
+title: "Title for the Dashboard"
+author: "Kesava Asam"
+output: 
+  flexdashboard::flex_dashboard:
+    theme: paper
+    logo: ~/Documents/Aouizerat_Lab/db_req/logo_copy.png
+    favicon: ~/Documents/Aouizerat_Lab/db_req/favicon.png
+    css: ~/Documents/Aouizerat_Lab/db_req/styles.css
+    orientation: columns
+    vertical_layout: fill
+editor_options: 
+  chunk_output_type: console
+--
+
+#### Note: .png and .css files location should be changed as per the computer
+
+
+## Font size in HTML rmarkdowns
+
+<font size="5"> ## Text in between the tags can will be size 5 </font>
+
+## Font color
+
+<font color= "green"> ## Text here will be in Green </font>
+
+
